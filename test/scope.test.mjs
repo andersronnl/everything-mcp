@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scopeQuery } from "../dist/scope.js";
+import { scopeQuery, isUnscoped } from "../dist/scope.js";
 
 const PROJ = "C:\\proj";
 
@@ -106,5 +106,23 @@ const rows = [
 for (const row of rows) {
   test(row.name, () => {
     assert.deepEqual(scopeQuery(...row.args), row.want);
+  });
+}
+
+// Literal want per row: does this call leave the project folder unscoped?
+const unscopedRows = [
+  { name: "plain query with a project path is scoped", args: [{ query: "foo.py" }, PROJ], want: false },
+  { name: "global is unscoped", args: [{ query: "foo.py", global: true }, PROJ], want: true },
+  { name: "no project path is unscoped", args: [{ query: "foo.py" }, ""], want: true },
+  { name: "whitespace project path is unscoped", args: [{ query: "foo.py" }, "  "], want: true },
+  { name: "positive path: filter is unscoped", args: [{ query: "path:Downloads dm:thisweek" }, PROJ], want: true },
+  { name: "negated !path: filter stays scoped", args: [{ query: "ext:ts !path:node_modules" }, PROJ], want: false },
+  { name: "quoted path: literal stays scoped", args: [{ query: '"path:foo"' }, PROJ], want: false },
+  { name: "regex containing path: stays scoped", args: [{ query: "path:\d+", regex: true }, PROJ], want: false },
+];
+
+for (const row of unscopedRows) {
+  test(`isUnscoped: ${row.name}`, () => {
+    assert.equal(isUnscoped(...row.args), row.want);
   });
 }

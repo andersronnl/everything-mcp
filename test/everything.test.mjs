@@ -71,6 +71,22 @@ test("a search returns the formatted listing", async () => {
   assert.equal(requests.at(-1).searchParams.get("search"), '"C:\\p\\" a.txt');
 });
 
+// Literal want per row: does the response open with a warning that the search left the project?
+const bannerRows = [
+  { name: "scoped search carries no banner", extra: {}, want: null },
+  { name: "global search says GLOBAL SEARCH", extra: { global: true }, want: /^⚠️ GLOBAL SEARCH: .*\(C:\\p\)/ },
+  { name: "no project path says UNSCOPED SEARCH", extra: { project_path: "" }, want: /^⚠️ UNSCOPED SEARCH: .*\(no project path set\)/ },
+  { name: "positive path: filter says UNSCOPED SEARCH", query: "path:p a.txt", extra: {}, want: /^⚠️ UNSCOPED SEARCH: .*\(C:\\p\)/ },
+];
+
+for (const row of bannerRows) {
+  test(`warning banner: ${row.name}`, async () => {
+    const out = await searchEverything({ ...params(row.query ?? "a.txt"), ...row.extra });
+    if (row.want === null) assert.doesNotMatch(out, /⚠️/);
+    else assert.match(out, row.want);
+  });
+}
+
 test("a hung server is given up on after the configured timeout", async () => {
   let timer;
   const sentinel = new Promise((r) => {

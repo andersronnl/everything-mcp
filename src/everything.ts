@@ -1,5 +1,5 @@
 import { EverythingResponse, SearchParams } from "./types.js";
-import { scopeQuery } from "./scope.js";
+import { isUnscoped, scopeQuery } from "./scope.js";
 import { formatMatches, formatResults, fullPath } from "./format.js";
 import { runRipgrep } from "./ripgrep.js";
 
@@ -30,8 +30,8 @@ export async function searchEverything(params: SearchParams): Promise<string> {
   const projectPath = params.project_path.trim() || PROJECT_PATH.trim();
 
   const { search, matchPath, regex } = scopeQuery(params, projectPath);
-  const globalWarning = params.global
-    ? `⚠️ GLOBAL SEARCH: Results may include files outside the project folder (${projectPath || "no project path set"}). You MUST ask the user for permission before accessing files or disk contents outside the project folder.\n\n`
+  const globalWarning = isUnscoped(params, projectPath)
+    ? `⚠️ ${params.global ? "GLOBAL" : "UNSCOPED"} SEARCH: Results may include files outside the project folder (${projectPath || "no project path set"}). You MUST ask the user for permission before accessing files or disk contents outside the project folder.\n\n`
     : "";
 
   url.searchParams.set("search", search);

@@ -32,13 +32,20 @@ function hasUnquotedPipe(query: string): boolean {
   return false;
 }
 
+// True when the search is allowed to reach outside the project folder: a global
+// search, no project path, or a positive path: filter (a regex query stays scoped).
+export function isUnscoped(params: ScopeInput, projectPath: string): boolean {
+  if (!normalizeProjectPath(projectPath) || params.global) return true;
+  return !params.regex && hasExplicitPathFilter(params.query);
+}
+
 // Auto-scope a query to the project folder unless a global search is requested
 export function scopeQuery(params: ScopeInput, projectPath: string): ScopedQuery {
   const matchPath = Boolean(params.match_path);
   const regex = Boolean(params.regex);
   const normalized = normalizeProjectPath(projectPath);
 
-  if (!normalized || params.global) {
+  if (isUnscoped(params, projectPath)) {
     return { search: params.query, matchPath, regex };
   }
 
@@ -57,11 +64,6 @@ export function scopeQuery(params: ScopeInput, projectPath: string): ScopedQuery
       (_, slashes: string) => (slashes.length % 2 === 1 ? slashes.slice(0, -1) : slashes) + "\\x22"
     );
     return { search: `${folderScope} regex:"${escaped}"`, matchPath, regex: false };
-  }
-
-  // Only add the folder scope if the query doesn't already contain a path: filter
-  if (hasExplicitPathFilter(params.query)) {
-    return { search: params.query, matchPath, regex: false };
   }
 
   // Group OR queries so AND>OR precedence cannot leak terms outside the folder.

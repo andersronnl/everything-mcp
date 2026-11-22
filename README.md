@@ -137,7 +137,8 @@ By default a search only covers the project folder, so the assistant does not wa
 
 - **Default:** the server limits the query to `project_path` (or the `PROJECT_PATH` environment variable).
 - **Global:** `global: true` searches the whole system. The response then starts with a warning telling the assistant to ask you before touching files outside the project.
-- **Explicit `path:`:** a query with its own positive `path:` filter is not scoped. That is what makes `path:Downloads dm:thisweek` work, but it also means such a query can match — and with `content`, read — files outside the project **without** the global warning. To narrow a search inside the project, use a `\folder\` term instead.
+- **Explicit `path:`:** a query with its own positive `path:` filter is not scoped. That is what makes `path:Downloads dm:thisweek` work, but such a query can match — and with `content`, read — files outside the project. The response then starts with an `UNSCOPED SEARCH` warning, the same ask-first notice as a global search. To narrow a search inside the project, use a `\folder\` term instead.
+- **No project path:** with no `project_path` and no `PROJECT_PATH`, nothing can be scoped, so the response also starts with the `UNSCOPED SEARCH` warning.
 - **Still scoped:** a negated filter (`!path:node_modules`), a `path:` inside quotes, and any query sent with `regex: true` stay inside the project folder.
 
 ## Configuration
