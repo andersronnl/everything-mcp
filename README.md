@@ -11,8 +11,8 @@ Everything indexes every file and folder on your NTFS drives and answers queries
 ## What this fork adds
 
 - **Content search.** Set the `content` parameter and ripgrep searches inside the files your Everything query matched — for example, "TODOs in TypeScript files changed this week". ripgrep is installed with the server; nothing extra to set up.
-- **Scoping that doesn't change your query.** Searches are limited to the project folder by a folder prefix instead of `path:` matching, so file-name terms keep matching file names.
-- **Argument validation.** A missing query, a bad `count` or `offset`, or an unknown `sort` comes back as a clear error naming the field.
+- **Scoping that doesn't change your query.** Searches are limited to the project folder by a folder prefix instead of `path:` matching, so file-name terms keep matching file names. Regex and OR queries are scoped too.
+- **Argument validation.** A missing query, a bad `count` or `offset`, an unknown `sort`, a wrongly typed value or an unknown argument comes back as a clear error naming the field.
 - **Timeouts.** A hung Everything server or a runaway ripgrep is abandoned after 30 seconds (configurable).
 - **Accurate result headers.** No more `showing 1-0` on an empty result or a leading backslash on drive roots.
 - **Read-only annotation.** The tool is marked `readOnlyHint`, so MCP clients can treat it as safe to run.
@@ -92,7 +92,7 @@ C:\proj\src  [folder]  2026-11-22T14:20:45.000Z
 | `\|` | OR | `foo \| bar` |
 | `!` | NOT | `!test` |
 | `\folder\` | A term containing a backslash matches the path | `!\node_modules\` |
-| `path:` | Match against the full path — [skips project scoping](#project-scoping) | `path:Downloads` |
+| `path:` | Match against the full path — a positive `path:` filter [skips project scoping](#project-scoping) | `path:Downloads` |
 
 Examples:
 
@@ -104,7 +104,7 @@ dm:today ext:js                 # JavaScript files modified today
 *.config.*                      # config files
 ```
 
-`!node_modules` only excludes items whose own *name* contains "node_modules". To exclude everything under a folder, use the backslash form: `!\node_modules\`.
+`!node_modules` only excludes items whose own *name* contains "node_modules". To exclude everything under a folder, use the backslash form `!\node_modules\` or the negated filter `!path:node_modules`. Both keep the search inside the project.
 
 ## Content search
 
@@ -128,6 +128,7 @@ C:\proj\src\ripgrep.ts:83:export async function runRipgrep(pattern: string, file
 - Files are searched in the query's sort order, so `sort: "date_modified"` with `ascending: false` searches the newest files first.
 - At most the first 5000 items the query matches are searched; the output says so when a query matches more. Narrow the query rather than searching everything.
 - Lines longer than 300 characters are shortened.
+- Your ripgrep configuration file is ignored, so results do not depend on local settings.
 - Do not put Everything's own `content:` function in the query. It returns nothing over the HTTP server.
 
 ## Project scoping
@@ -136,7 +137,8 @@ By default a search only covers the project folder, so the assistant does not wa
 
 - **Default:** the server limits the query to `project_path` (or the `PROJECT_PATH` environment variable).
 - **Global:** `global: true` searches the whole system. The response then starts with a warning telling the assistant to ask you before touching files outside the project.
-- **Explicit `path:`:** a query that contains its own `path:` filter is not scoped. That is what makes `path:Downloads dm:thisweek` work, but it also means such a query can match — and with `content`, read — files outside the project **without** the global warning. Prefer `\folder\` terms when you only want to narrow a search inside the project.
+- **Explicit `path:`:** a query with its own positive `path:` filter is not scoped. That is what makes `path:Downloads dm:thisweek` work, but it also means such a query can match — and with `content`, read — files outside the project **without** the global warning. To narrow a search inside the project, use a `\folder\` term instead.
+- **Still scoped:** a negated filter (`!path:node_modules`), a `path:` inside quotes, and any query sent with `regex: true` stay inside the project folder.
 
 ## Configuration
 
@@ -206,9 +208,11 @@ MCP client  -->  this server (stdio)  -->  Everything HTTP server  -->  Everythi
 | Symptom | Cause and fix |
 |---------|---------------|
 | `Cannot connect to Everything HTTP server` | Everything is not running, its HTTP server is disabled, or `EVERYTHING_PORT` does not match the port in Everything's options. |
+| `returned invalid JSON` | `EVERYTHING_PORT` points at some other web server. Use the port from Everything's HTTP Server options. |
+| `Unknown argument: …` or `… must be a boolean` | The tool call passed an argument the server does not know, or a value of the wrong type. |
 | `did not respond within 30000ms` | Everything is busy (for example, still indexing). Retry, or raise `EVERYTHING_TIMEOUT_MS`. |
 | A file you know exists is not found | The search is scoped to the project folder. Use `global: true` to search everywhere. |
-| `!node_modules` still returns files under `node_modules` | That term matches names only. Use `!\node_modules\`. |
+| `!node_modules` still returns files under `node_modules` | That term matches names only. Use `!\node_modules\` or `!path:node_modules`. |
 | `Cannot run ripgrep at …` | The bundled binary is missing (re-run `npm install`) or `RIPGREP_PATH` points at the wrong file. |
 
 ## Development
