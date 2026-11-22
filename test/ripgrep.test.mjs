@@ -92,3 +92,19 @@ test("more files than fit on one command line are all searched, in order", async
 
   await assert.rejects(runRipgrep("needle", files, { ...opts, limit: 1000, timeoutMs: 1 }), /ripgrep timed out after 1ms/);
 });
+
+test("ignores RIPGREP_CONFIG_PATH and does not recurse into directories", async (t) => {
+  const cfg = path.join(dir, "ripgreprc");
+  const sub = path.join(dir, "subdir");
+  fs.writeFileSync(cfg, "--json\n");
+  fs.mkdirSync(sub, { recursive: true });
+  fs.writeFileSync(path.join(sub, "hidden.txt"), "TODO inside dir\n");
+  const prev = process.env.RIPGREP_CONFIG_PATH;
+  process.env.RIPGREP_CONFIG_PATH = cfg;
+  t.after(() => {
+    if (prev === undefined) delete process.env.RIPGREP_CONFIG_PATH;
+    else process.env.RIPGREP_CONFIG_PATH = prev;
+  });
+
+  assert.deepEqual(await runRipgrep("TODO", [a, sub], opts), [`${a}:2:TODO one`]);
+});

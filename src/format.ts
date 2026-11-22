@@ -2,23 +2,33 @@ import { EverythingResponse, EverythingResult } from "./types.js";
 
 const FILETIME_EPOCH_DIFF = 11644473600000n; // ms between 1601-01-01 and 1970-01-01
 const FILETIME_TICKS_PER_MS = 10000n;
+const MAX_DATE_MS = 8640000000000000n; // ECMAScript Date max timestamp
+const UNKNOWN_UINT64 = "18446744073709551615"; // Everything sentinel for unknown size/date
 
-function filetimeToISO(filetime: string): string {
+function filetimeToISO(filetime: string): string | null {
+  if (!/^\d+$/.test(filetime) || filetime === "0" || filetime === UNKNOWN_UINT64) {
+    return null;
+  }
   const ft = BigInt(filetime);
   const ms = ft / FILETIME_TICKS_PER_MS - FILETIME_EPOCH_DIFF;
+  if (ms < -MAX_DATE_MS || ms > MAX_DATE_MS) return null;
   return new Date(Number(ms)).toISOString();
 }
 
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
-  const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(1);
+  const safeMs = Math.max(0, ms);
+  if (Math.round(safeMs) < 1000) return `${Math.round(safeMs)}ms`;
+  if (Math.round(safeMs / 10) < 6000) return `${(safeMs / 1000).toFixed(2)}s`;
+  const totalTenths = Math.round(safeMs / 100);
+  const minutes = Math.floor(totalTenths / 600);
+  const seconds = ((totalTenths % 600) / 10).toFixed(1);
   return `${minutes}m ${seconds}s`;
 }
 
-function formatSize(sizeStr: string): string {
+function formatSize(sizeStr: string): string | null {
+  if (sizeStr === "" || sizeStr === UNKNOWN_UINT64) return null;
   const size = Number(sizeStr);
+  if (!Number.isFinite(size) || size < 0) return null;
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -27,7 +37,8 @@ function formatSize(sizeStr: string): string {
 
 export function fullPath(r: EverythingResult): string {
   // A drive root has an empty parent path
-  return r.path ? `${r.path}\\${r.name}` : r.name;
+  if (!r.path) return r.name;
+  return r.path.endsWith("\\") ? `${r.path}${r.name}` : `${r.path}\\${r.name}`;
 }
 
 // Render one page of Everything results as the text the tool returns
@@ -47,11 +58,13 @@ export function formatResults(data: EverythingResponse, offset: number, elapsedM
     if (r.type === "folder") {
       parts.push("[folder]");
     } else if (r.size !== undefined) {
-      parts.push(formatSize(r.size));
+      const size = formatSize(r.size);
+      if (size !== null) parts.push(size);
     }
 
     if (r.date_modified) {
-      parts.push(filetimeToISO(r.date_modified));
+      const iso = filetimeToISO(r.date_modified);
+      if (iso !== null) parts.push(iso);
     }
 
     lines.push(parts.join("  "));

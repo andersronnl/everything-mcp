@@ -49,6 +49,36 @@ const rows = [
     args: [{ totalResults: 1, results: [{ type: "folder", name: "C:", path: "", size: "", date_modified: FT_1970 }] }, 0, 5],
     want: "Found 1 results (showing 1-1) in 5ms\n\nC:  [folder]  1970-01-01T00:00:00.000Z",
   },
+  {
+    name: "a parent path already ending in backslash gets no double backslash",
+    args: [{ totalResults: 1, results: [{ type: "file", name: "a.txt", path: "C:\\", size: "10", date_modified: FT_1970 }] }, 0, 5],
+    want: "Found 1 results (showing 1-1) in 5ms\n\nC:\\a.txt  10 B  1970-01-01T00:00:00.000Z",
+  },
+  {
+    name: "unknown size and sentinel/invalid dates are omitted instead of crashing or showing bogus values",
+    args: [
+      {
+        totalResults: 3,
+        results: [
+          { type: "file", name: "empty-size.txt", path: "C:\\p", size: "", date_modified: "18446744073709551615" },
+          { type: "file", name: "max-size.txt", path: "C:\\p", size: "18446744073709551615", date_modified: "0" },
+          { type: "file", name: "bad-fields.txt", path: "C:\\p", size: "not-a-number", date_modified: "not-a-date" },
+        ],
+      },
+      0,
+      5,
+    ],
+    want:
+      "Found 3 results (showing 1-3) in 5ms\n\n" +
+      "C:\\p\\empty-size.txt\n" +
+      "C:\\p\\max-size.txt\n" +
+      "C:\\p\\bad-fields.txt",
+  },
+  {
+    name: "duration rounding rolls over cleanly at 1s and 1m boundaries",
+    args: [{ totalResults: 0, results: [] }, 0, 119999],
+    want: "Found 0 results in 2m 0.0s",
+  },
 ];
 
 for (const row of rows) {

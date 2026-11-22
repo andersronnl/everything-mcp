@@ -9,37 +9,97 @@ const rows = [
   {
     name: "scopes with the folder prefix, not path: and not match-path",
     args: [{ query: "foo.py" }, PROJ],
-    want: { search: '"C:\\proj\\" foo.py', matchPath: false },
+    want: { search: '"C:\\proj\\" foo.py', matchPath: false, regex: false },
   },
   {
     name: "a project path already ending in a backslash gets exactly one",
     args: [{ query: "foo.py" }, "C:\\proj\\"],
-    want: { search: '"C:\\proj\\" foo.py', matchPath: false },
+    want: { search: '"C:\\proj\\" foo.py', matchPath: false, regex: false },
+  },
+  {
+    name: "forward slashes in project path are normalized to backslashes",
+    args: [{ query: "foo.py" }, "C:/my proj/"],
+    want: { search: '"C:\\my proj\\" foo.py', matchPath: false, regex: false },
   },
   {
     name: "a project path with spaces stays one quoted term",
     args: [{ query: "ext:py" }, "C:\\my proj"],
-    want: { search: '"C:\\my proj\\" ext:py', matchPath: false },
+    want: { search: '"C:\\my proj\\" ext:py', matchPath: false, regex: false },
+  },
+  {
+    name: "whitespace-only project path means no scope",
+    args: [{ query: "foo.py" }, "   "],
+    want: { search: "foo.py", matchPath: false, regex: false },
   },
   {
     name: "a query carrying its own path: filter is left alone",
     args: [{ query: "path:src ext:ts" }, PROJ],
-    want: { search: "path:src ext:ts", matchPath: false },
+    want: { search: "path:src ext:ts", matchPath: false, regex: false },
+  },
+  {
+    name: "negated !path: filter stays scoped to the project",
+    args: [{ query: "ext:ts !path:node_modules" }, PROJ],
+    want: { search: '"C:\\proj\\" ext:ts !path:node_modules', matchPath: false, regex: false },
+  },
+  {
+    name: "no-path: modifier stays scoped to the project",
+    args: [{ query: "no-path:foo" }, PROJ],
+    want: { search: '"C:\\proj\\" no-path:foo', matchPath: false, regex: false },
+  },
+  {
+    name: "quoted path: literal stays scoped to the project",
+    args: [{ query: '"path:foo"' }, PROJ],
+    want: { search: '"C:\\proj\\" "path:foo"', matchPath: false, regex: false },
+  },
+  {
+    name: "OR queries are grouped so AND>OR precedence cannot escape the project",
+    args: [{ query: "foo | bar" }, PROJ],
+    want: { search: '"C:\\proj\\" <foo | bar>', matchPath: false, regex: false },
+  },
+  {
+    name: "quoted pipe is not wrapped in grouping brackets",
+    args: [{ query: '"foo|bar"' }, PROJ],
+    want: { search: '"C:\\proj\\" "foo|bar"', matchPath: false, regex: false },
+  },
+  {
+    name: "scoped regex uses per-term regex: modifier instead of global regex=1",
+    args: [{ query: "^foo.*\\.ts$", regex: true }, PROJ],
+    want: { search: '"C:\\proj\\" regex:"^foo.*\\.ts$"', matchPath: false, regex: false },
+  },
+  {
+    name: "scoped regex escapes double quotes as PCRE \\x22",
+    args: [{ query: 'a"b\\"c\\\\"d', regex: true }, PROJ],
+    want: { search: '"C:\\proj\\" regex:"a\\x22b\\x22c\\\\\\x22d"', matchPath: false, regex: false },
+  },
+  {
+    name: "scoped regex ignores path: substring inside the regex pattern",
+    args: [{ query: "path:\\d+", regex: true }, PROJ],
+    want: { search: '"C:\\proj\\" regex:"path:\\d+"', matchPath: false, regex: false },
+  },
+  {
+    name: "global regex keeps regex=1 flag",
+    args: [{ query: "^foo.*\\.ts$", regex: true, global: true }, PROJ],
+    want: { search: "^foo.*\\.ts$", matchPath: false, regex: true },
+  },
+  {
+    name: "case_sensitive and whole_word do not restrict the folder prefix",
+    args: [{ query: "Foo", case_sensitive: true, whole_word: true }, PROJ],
+    want: { search: 'nocase:noww:"C:\\proj\\" Foo', matchPath: false, regex: false },
   },
   {
     name: "global search is not scoped",
     args: [{ query: "foo.py", global: true }, PROJ],
-    want: { search: "foo.py", matchPath: false },
+    want: { search: "foo.py", matchPath: false, regex: false },
   },
   {
     name: "no project path means no scope",
     args: [{ query: "foo.py" }, ""],
-    want: { search: "foo.py", matchPath: false },
+    want: { search: "foo.py", matchPath: false, regex: false },
   },
   {
     name: "an explicit match_path is still honoured",
     args: [{ query: "foo.py", match_path: true }, PROJ],
-    want: { search: '"C:\\proj\\" foo.py', matchPath: true },
+    want: { search: '"C:\\proj\\" foo.py', matchPath: true, regex: false },
   },
 ];
 

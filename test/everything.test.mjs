@@ -16,7 +16,23 @@ const requests = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   requests.push(url);
-  if (url.searchParams.get("search").includes("hang")) return;
+  const q = url.searchParams.get("search") ?? "";
+  if (q.includes("hang-body")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write('{"totalResults":1');
+    return;
+  }
+  if (q.includes("hang")) return;
+  if (q.includes("bad-json")) {
+    res.setHeader("content-type", "text/html");
+    res.end("<html>not json</html>");
+    return;
+  }
+  if (q.includes("bad-shape")) {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
   res.setHeader("content-type", "application/json");
   res.end(JSON.stringify(reply));
 });
@@ -104,4 +120,20 @@ test("content search runs ripgrep over the files the query matched", async (t) =
   // Every matching file is a candidate, not just one page of them.
   assert.equal(requests.at(-1).searchParams.get("count"), "5000");
   assert.equal(requests.at(-1).searchParams.get("offset"), "0");
+});
+
+test("body timeout, invalid JSON, and unexpected JSON shape produce clear errors", async () => {
+  await assert.rejects(searchEverything(params("hang-body")), /did not respond within 200ms/);
+  await assert.rejects(searchEverything(params("bad-json")), /returned invalid JSON/);
+  await assert.rejects(searchEverything(params("bad-shape")), /returned an unexpected response/);
+});
+
+test("scoped regex uses regex: modifier without regex=1, while global regex sets regex=1", async () => {
+  await searchEverything({ ...params("^a\\.txt$"), regex: true });
+  assert.equal(requests.at(-1).searchParams.get("regex"), null);
+  assert.equal(requests.at(-1).searchParams.get("search"), '"C:\\p\\" regex:"^a\\.txt$"');
+
+  await searchEverything({ ...params("^a\\.txt$"), regex: true, global: true });
+  assert.equal(requests.at(-1).searchParams.get("regex"), "1");
+  assert.equal(requests.at(-1).searchParams.get("search"), "^a\\.txt$");
 });

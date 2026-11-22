@@ -37,17 +37,31 @@ for (const row of ok) {
 
 const bad = [
   { name: "missing arguments", args: undefined, want: /query must be a non-empty string/ },
+  { name: "non-object arguments", args: [], want: /arguments must be an object/ },
+  { name: "unknown argument", args: { query: "a", caseSensitive: true }, want: /Unknown argument: caseSensitive/ },
   { name: "missing query", args: {}, want: /query must be a non-empty string/ },
   { name: "blank query", args: { query: "   " }, want: /query must be a non-empty string/ },
   { name: "non-string query", args: { query: 5 }, want: /query must be a non-empty string/ },
   { name: "non-numeric count", args: { query: "a", count: "abc" }, want: /count must be a positive integer/ },
+  { name: "boolean count", args: { query: "a", count: true }, want: /count must be a positive integer/ },
+  { name: "string number count", args: { query: "a", count: "5" }, want: /count must be a positive integer/ },
+  { name: "null count", args: { query: "a", count: null }, want: /count must be a positive integer/ },
   { name: "zero count", args: { query: "a", count: 0 }, want: /count must be a positive integer/ },
   { name: "negative count", args: { query: "a", count: -5 }, want: /count must be a positive integer/ },
   { name: "fractional count", args: { query: "a", count: 2.7 }, want: /count must be a positive integer/ },
   { name: "negative offset", args: { query: "a", offset: -1 }, want: /offset must be a non-negative integer/ },
   { name: "non-numeric offset", args: { query: "a", offset: "x" }, want: /offset must be a non-negative integer/ },
+  { name: "empty string offset", args: { query: "a", offset: "" }, want: /offset must be a non-negative integer/ },
+  { name: "boolean offset", args: { query: "a", offset: false }, want: /offset must be a non-negative integer/ },
   { name: "unknown sort field", args: { query: "a", sort: "bogus" }, want: /sort must be one of name, path, size, date_modified/ },
   { name: "non-string content", args: { query: "a", content: 5 }, want: /content must be a string/ },
+  { name: "non-string project_path", args: { query: "a", project_path: 123 }, want: /project_path must be a string/ },
+  { name: "string global boolean", args: { query: "a", global: "false" }, want: /global must be a boolean/ },
+  { name: "string ascending boolean", args: { query: "a", ascending: "false" }, want: /ascending must be a boolean/ },
+  { name: "numeric regex boolean", args: { query: "a", regex: 1 }, want: /regex must be a boolean/ },
+  { name: "string case_sensitive boolean", args: { query: "a", case_sensitive: "true" }, want: /case_sensitive must be a boolean/ },
+  { name: "string whole_word boolean", args: { query: "a", whole_word: "false" }, want: /whole_word must be a boolean/ },
+  { name: "string match_path boolean", args: { query: "a", match_path: "false" }, want: /match_path must be a boolean/ },
 ];
 
 for (const row of bad) {

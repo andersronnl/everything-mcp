@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { rgPath as BUNDLED_RG } from "@vscode/ripgrep";
 
 const RG_PATH = process.env.RIPGREP_PATH || BUNDLED_RG;
-// Windows caps a command line at 32,767 characters; leave room for the flags.
-const MAX_ARG_CHARS = 28000;
+// Windows caps a command line at 32,767 characters; leave headroom for quoting.
+const MAX_CMD_CHARS = 30000;
+const FLAG_OVERHEAD = 512;
 
 export interface RipgrepOptions {
   caseSensitive: boolean;
@@ -28,13 +29,21 @@ export function chunkPaths(paths: string[], maxChars: number): string[][] {
   return chunks;
 }
 
-function runChunk(pattern: string, files: string[], opts: RipgrepOptions, limit: number): Promise<string[]> {
+function runChunk(
+  pattern: string,
+  files: string[],
+  opts: RipgrepOptions,
+  limit: number,
+  remainingMs: number,
+  totalTimeoutMs: number
+): Promise<string[]> {
   const rgPath = opts.rgPath ?? RG_PATH;
-  const timeoutMs = opts.timeoutMs ?? 30000;
   return new Promise((resolve, reject) => {
     const child = spawn(
       rgPath,
       [
+        "--no-config", // ignore user RIPGREP_CONFIG_PATH settings
+        "--max-depth=0", // never recurse if a listed path has become a directory
         "--line-number",
         "--with-filename",
         "--no-heading",
@@ -49,42 +58,75 @@ function runChunk(pattern: string, files: string[], opts: RipgrepOptions, limit:
         "--",
         ...files,
       ],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: timeoutMs, windowsHide: true }
+      { stdio: ["ignore", "pipe", "pipe"], windowsHide: true }
     );
 
     let out = "";
     let err = "";
     let newlines = 0;
     let enough = false;
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, remainingMs);
+
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (text: string) => {
+      if (enough) return;
       out += text;
       newlines += text.split("\n").length - 1;
-      if (!enough && newlines >= limit) {
+      if (newlines >= limit) {
         enough = true;
+        clearTimeout(timer);
         child.kill();
       }
     });
     child.stderr.on("data", (text: string) => {
       err += text;
     });
-    child.on("error", (e) => reject(new Error(`Cannot run ripgrep at ${rgPath}: ${e.message}`)));
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(new Error(`Cannot run ripgrep at ${rgPath}: ${e.message}`));
+    });
     child.on("close", (code, signal) => {
-      if (signal && !enough) return reject(new Error(`ripgrep timed out after ${timeoutMs}ms`));
-      if (code === 2 && err.trim()) return reject(new Error(`ripgrep: ${err.trim()}`));
-      // Only complete lines: the text after the last newline is empty or cut off
-      resolve(out.split(/\r?\n/).slice(0, -1).slice(0, limit));
+      clearTimeout(timer);
+      if (timedOut && !enough) return reject(new Error(`ripgrep timed out after ${totalTimeoutMs}ms`));
+      if (!enough) {
+        if (signal) return reject(new Error(`ripgrep exited due to signal ${signal}`));
+        if (code !== 0 && code !== 1) {
+          // Exit code 2 with empty stderr means --no-messages skipped an unreadable file.
+          if (code !== 2 || err.trim()) {
+            const detail = err.trim() || `exited with code ${code}`;
+            return reject(new Error(`ripgrep: ${detail}`));
+          }
+        }
+      }
+      const rawLines = out.split(/\r?\n/);
+      // Drop the empty tail after the final newline, or a partial line if killed early
+      if (enough || out.endsWith("\n") || out === "") rawLines.pop();
+      resolve(rawLines.slice(0, limit));
     });
   });
 }
 
 // Search the given files for a regex; returns up to opts.limit "path:line:text" lines
 export async function runRipgrep(pattern: string, files: string[], opts: RipgrepOptions): Promise<string[]> {
+  const timeoutMs = opts.timeoutMs ?? 30000;
+  const rgPath = opts.rgPath ?? RG_PATH;
+  const maxArgChars = Math.max(1024, MAX_CMD_CHARS - rgPath.length - pattern.length - FLAG_OVERHEAD);
+  const deadline = Date.now() + timeoutMs;
+
   const lines: string[] = [];
-  for (const chunk of chunkPaths(files, MAX_ARG_CHARS)) {
+  for (const chunk of chunkPaths(files, maxArgChars)) {
     if (lines.length >= opts.limit) break;
-    lines.push(...(await runChunk(pattern, chunk, opts, opts.limit - lines.length)));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error(`ripgrep timed out after ${timeoutMs}ms`);
+    }
+    lines.push(...(await runChunk(pattern, chunk, opts, opts.limit - lines.length, remaining, timeoutMs)));
   }
   return lines;
 }
