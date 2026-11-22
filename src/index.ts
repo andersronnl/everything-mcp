@@ -11,7 +11,7 @@ import { parseArgs, SORT_FIELDS } from "./args.js";
 const server = new Server(
   {
     name: "everything-search",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   {
     capabilities: {
