@@ -9,10 +9,12 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "tsc && node --test",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@vscode/ripgrep": "^1.18.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",

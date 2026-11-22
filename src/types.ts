@@ -23,4 +23,5 @@ export interface SearchParams {
   match_path: boolean;
   global: boolean;
   project_path: string;
+  content: string; // ripgrep pattern; empty means a plain file listing
 }

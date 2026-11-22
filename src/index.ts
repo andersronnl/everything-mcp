@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { searchEverything, MAX_RESULTS } from "./everything.js";
-import { SearchParams } from "./types.js";
+import { parseArgs, SORT_FIELDS } from "./args.js";
 
 const server = new Server(
   {
@@ -31,13 +31,13 @@ Everything search syntax:
 - Simple text: matches filename (e.g. "readme" finds all files with "readme" in the name)
 - Wildcards: * and ? (e.g. "*.py" finds all Python files)
 - Boolean: space = AND, | = OR, ! = NOT (e.g. "foo bar" finds files matching both)
+- Exclude a folder: a term containing a backslash matches the path (e.g. "ext:ts !\\node_modules\\" skips everything under node_modules; "!node_modules" only matches names)
 - Quotes: "exact phrase" for literal matching
 - ext: filter by extension (e.g. "ext:ts;js" for TypeScript and JavaScript files)
 - path: match full path (e.g. "path:src ext:ts" for .ts files under any src folder)
 - size: filter by size (e.g. "size:>10mb", "size:1kb..100kb")
 - dm: date modified (e.g. "dm:today", "dm:lastweek", "dm:2024-01")
 - dc: date created (e.g. "dc:thismonth")
-- content: search file contents (e.g. "content:TODO ext:py" — requires content indexing enabled)
 - parent: match parent folder (e.g. "parent:node_modules package.json")
 - Regex: enable regex parameter for regex patterns
 
@@ -46,13 +46,21 @@ Examples:
 - Find large files: "size:>100mb"
 - Find recent downloads: "path:Downloads dm:thisweek"
 - Find TypeScript in a project: "ext:ts path:my-project"
-- Find by content: "content:import\\ React ext:tsx"`,
+
+To search inside files, set the \`content\` parameter: the query selects the files (e.g. "ext:ts dm:thisweek") and ripgrep searches their contents. Do not put Everything's own content function in the query; it returns nothing.`,
+        annotations: {
+          readOnlyHint: true,
+        },
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
               description: "Everything search query",
+            },
+            content: {
+              type: "string",
+              description: "Regex (ripgrep syntax) to search for inside the files the query matches. When set, the result is matching lines as path:line:text instead of a file listing; count and offset then page through matching lines, and case_sensitive applies to this pattern too. At most the first 5000 items the query matches are searched, in sort order.",
             },
             count: {
               type: "number",
@@ -66,7 +74,7 @@ Examples:
             },
             sort: {
               type: "string",
-              enum: ["name", "path", "size", "date_modified"],
+              enum: SORT_FIELDS,
               description: "Sort field (default: name)",
               default: "name",
             },
@@ -118,22 +126,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     throw new Error(`Unknown tool: ${request.params.name}`);
   }
 
-  const args = request.params.arguments as Record<string, unknown>;
-  const params: SearchParams = {
-    query: args.query as string,
-    count: Math.min(Number(args.count ?? 50), MAX_RESULTS),
-    offset: Number(args.offset ?? 0),
-    sort: (args.sort as string) ?? "name",
-    ascending: (args.ascending as boolean) ?? true,
-    regex: (args.regex as boolean) ?? false,
-    case_sensitive: (args.case_sensitive as boolean) ?? false,
-    whole_word: (args.whole_word as boolean) ?? false,
-    match_path: (args.match_path as boolean) ?? false,
-    global: (args.global as boolean) ?? false,
-    project_path: (args.project_path as string) ?? "",
-  };
-
   try {
+    const params = parseArgs(request.params.arguments, MAX_RESULTS);
     const result = await searchEverything(params);
     return {
       content: [{ type: "text", text: result }],
